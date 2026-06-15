@@ -8,6 +8,7 @@ import './encoder-panel';
 import './paper-tape-view';
 import './transmission-control';
 import './decoder-panel';
+import './challenge-mode';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
@@ -58,6 +59,35 @@ export class AppRoot extends LitElement {
       letter-spacing: 1px;
       margin-top: 8px;
     }
+    .mode-switch {
+      display: inline-flex;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid #3d3428;
+      border-radius: 6px;
+      padding: 2px;
+      margin-top: 12px;
+    }
+    .mode-switch button {
+      background: transparent;
+      border: none;
+      color: #8b8070;
+      padding: 6px 16px;
+      font-size: 11px;
+      font-family: 'IBM Plex Mono', monospace;
+      cursor: pointer;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      transition: all 0.2s ease;
+    }
+    .mode-switch button:hover {
+      color: #d4a030;
+    }
+    .mode-switch button.active {
+      background: rgba(212, 160, 48, 0.2);
+      color: #d4a030;
+      border: 1px solid #d4a030;
+    }
   `;
 
   @state() private encodedColumns: EncodedColumn[] = [];
@@ -66,6 +96,7 @@ export class AppRoot extends LitElement {
   @state() private noiseLevel = 0;
   @state() private playbackSpeed = 1;
   @state() private isPlaying = false;
+  @state() private mode: 'classic' | 'challenge' = 'classic';
 
   private originalEncodedColumns: EncodedColumn[] = [];
 
@@ -138,42 +169,72 @@ export class AppRoot extends LitElement {
     this.isPlaying = false;
   }
 
+  private handleModeChange(mode: 'classic' | 'challenge') {
+    this.mode = mode;
+  }
+
   render() {
     return html`
       <div class="header">
         <h1>电传打字机纸带编码模拟器</h1>
         <div class="subtitle">BAUDOT ITA2 ENCODING SIMULATOR</div>
         <span class="version-badge">BAUDOT MORK ITA2</span>
+        <div class="mode-switch">
+          <button
+            class=${this.mode === 'classic' ? 'active' : ''}
+            @click=${() => this.handleModeChange('classic')}
+          >
+            经典模式
+          </button>
+          <button
+            class=${this.mode === 'challenge' ? 'active' : ''}
+            @click=${() => this.handleModeChange('challenge')}
+          >
+            纠错挑战
+          </button>
+        </div>
       </div>
       <div class="content">
-        <encoder-panel
-          .columns=${this.encodedColumns}
-          @text-input=${this.handleTextInput}
-        ></encoder-panel>
+        ${this.mode === 'classic' ? html`
+          <encoder-panel
+            .columns=${this.encodedColumns}
+            @text-input=${this.handleTextInput}
+          ></encoder-panel>
 
-        <paper-tape-view
-          .columns=${this.encodedColumns}
-          .isPlaying=${this.isPlaying}
-          .playbackSpeed=${this.playbackSpeed}
-          @bits-changed=${this.handleBitsChanged}
-          @playback-finished=${this.handlePlaybackFinished}
-        ></paper-tape-view>
+          <paper-tape-view
+            .columns=${this.encodedColumns}
+            .isPlaying=${this.isPlaying}
+            .playbackSpeed=${this.playbackSpeed}
+            @bits-changed=${this.handleBitsChanged}
+            @playback-finished=${this.handlePlaybackFinished}
+          ></paper-tape-view>
 
-        <transmission-control
-          .noiseLevel=${this.noiseLevel}
-          .playbackSpeed=${this.playbackSpeed}
-          .isPlaying=${this.isPlaying}
-          .hasColumns=${this.encodedColumns.length > 0}
-          @noise-change=${this.handleNoiseChange}
-          @speed-change=${this.handleSpeedChange}
-          @playback-control=${this.handlePlaybackControl}
-          @inject-noise=${this.handleInjectNoise}
-        ></transmission-control>
+          <transmission-control
+            .noiseLevel=${this.noiseLevel}
+            .playbackSpeed=${this.playbackSpeed}
+            .isPlaying=${this.isPlaying}
+            .hasColumns=${this.encodedColumns.length > 0}
+            @noise-change=${this.handleNoiseChange}
+            @speed-change=${this.handleSpeedChange}
+            @playback-control=${this.handlePlaybackControl}
+            @inject-noise=${this.handleInjectNoise}
+          ></transmission-control>
 
-        <decoder-panel
-          .decodedColumns=${this.decodedColumns}
-          .originalText=${this.originalText}
-        ></decoder-panel>
+          <decoder-panel
+            .decodedColumns=${this.decodedColumns}
+            .originalText=${this.originalText}
+          ></decoder-panel>
+        ` : html`
+          <encoder-panel
+            .columns=${this.encodedColumns}
+            @text-input=${this.handleTextInput}
+          ></encoder-panel>
+
+          <challenge-mode
+            .columns=${this.encodedColumns}
+            .originalText=${this.originalText}
+          ></challenge-mode>
+        `}
       </div>
     `;
   }
