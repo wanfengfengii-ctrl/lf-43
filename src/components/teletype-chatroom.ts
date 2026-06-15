@@ -745,11 +745,19 @@ export class TeletypeChatroom extends LitElement {
     }
 
     this.currentColumnIndex = nextIndex;
-    const column = columns[nextIndex];
-    const receiverConfig = this.transmittingEnd === 'A' ? this.configB : this.configA;
-    const currentShiftState = this.transmittingEnd === 'A' ? this.shiftStateB : this.shiftStateA;
+    this.transmitColumnAtIndex(nextIndex);
+  }
 
-    const transmissionResult = transmitColumn(column, receiverConfig, nextIndex);
+  private transmitColumnAtIndex(index: number) {
+    if (!this.currentMessage || !this.transmittingEnd) return;
+
+    const columns = this.currentMessage.sentColumns;
+    const column = columns[index];
+    const receiverConfig = this.transmittingEnd === 'A' ? this.configB : this.configA;
+    const isRetransmission = column.retransmitCount > 0;
+    const currentShiftState = this.getShiftStateBeforeIndex(index, isRetransmission);
+
+    const transmissionResult = transmitColumn(column, receiverConfig, index);
     const processResult = processReceivedColumn(
       column,
       transmissionResult.receivedBits,
@@ -758,15 +766,16 @@ export class TeletypeChatroom extends LitElement {
     );
 
     const updatedColumn = processResult.column;
-    columns[nextIndex] = updatedColumn;
+    updatedColumn.retransmitCount = column.retransmitCount;
+    columns[index] = updatedColumn;
 
     if (this.transmittingEnd === 'A') {
       this.shiftStateB = processResult.newShiftState;
-      this.receivedColumnsB = [...columns.slice(0, nextIndex + 1)];
+      this.receivedColumnsB = [...columns.slice(0, index + 1)];
       this.receivedTextB = buildReceivedText(this.receivedColumnsB);
     } else {
       this.shiftStateA = processResult.newShiftState;
-      this.receivedColumnsA = [...columns.slice(0, nextIndex + 1)];
+      this.receivedColumnsA = [...columns.slice(0, index + 1)];
       this.receivedTextA = buildReceivedText(this.receivedColumnsA);
     }
 
@@ -777,7 +786,7 @@ export class TeletypeChatroom extends LitElement {
         this.requestUpdate();
 
         this.transmissionTimer = window.setTimeout(() => {
-          this.transmitNextColumn();
+          this.transmitColumnAtIndex(index);
         }, this.getTransmissionInterval(this.transmittingEnd));
         return;
       }
@@ -788,6 +797,26 @@ export class TeletypeChatroom extends LitElement {
     this.transmissionTimer = window.setTimeout(() => {
       this.transmitNextColumn();
     }, this.getTransmissionInterval(this.transmittingEnd));
+  }
+
+  private getShiftStateBeforeIndex(index: number, isRetransmission: boolean): ShiftState {
+    if (index === 0) return 'LETTERS';
+
+    let shift: ShiftState = 'LETTERS';
+    const endIndex = isRetransmission ? index : index;
+
+    for (let i = 0; i < endIndex; i++) {
+      const col = this.currentMessage?.sentColumns[i];
+      if (!col) continue;
+      const activeBits = col.receivedBits;
+      const key = activeBits.map(b => (b ? '1' : '0')).join('');
+      if (key === '11111') {
+        shift = 'LETTERS';
+      } else if (key === '11011') {
+        shift = 'FIGURES';
+      }
+    }
+    return shift;
   }
 
   private finishTransmission() {
@@ -827,97 +856,109 @@ export class TeletypeChatroom extends LitElement {
   private handleNoiseChange(end: TeletypeEnd, e: CustomEvent) {
     const value = (e.target as any).value as number;
     const noiseLevel = Math.max(0, Math.min(1, value / 100));
+    const baseConfig = end === 'A' ? this.configA : this.configB;
+    const newConfig: EndpointConfig = { ...baseConfig, noiseLevel };
 
     if (end === 'A') {
-      this.configA = { ...this.configA, noiseLevel };
+      this.configA = newConfig;
     } else {
-      this.configB = { ...this.configB, noiseLevel };
+      this.configB = newConfig;
     }
 
     this.configHistory.push({
       timestamp: Date.now(),
       end,
-      config: end === 'A' ? { ...this.configA } : { ...this.configB },
+      config: { ...newConfig },
     });
   }
 
   private handleSpeedChange(end: TeletypeEnd, e: CustomEvent) {
     const value = (e.target as any).value as number;
+    const baseConfig = end === 'A' ? this.configA : this.configB;
+    const newConfig: EndpointConfig = { ...baseConfig, transmissionSpeed: value };
 
     if (end === 'A') {
-      this.configA = { ...this.configA, transmissionSpeed: value };
+      this.configA = newConfig;
     } else {
-      this.configB = { ...this.configB, transmissionSpeed: value };
+      this.configB = newConfig;
     }
 
     this.configHistory.push({
       timestamp: Date.now(),
       end,
-      config: end === 'A' ? { ...this.configA } : { ...this.configB },
+      config: { ...newConfig },
     });
   }
 
   private handleFaultTypeChange(end: TeletypeEnd, e: Event) {
     const value = (e.target as HTMLSelectElement).value as FaultInjectionType;
+    const baseConfig = end === 'A' ? this.configA : this.configB;
+    const newConfig: EndpointConfig = { ...baseConfig, faultType: value };
 
     if (end === 'A') {
-      this.configA = { ...this.configA, faultType: value };
+      this.configA = newConfig;
     } else {
-      this.configB = { ...this.configB, faultType: value };
+      this.configB = newConfig;
     }
 
     this.configHistory.push({
       timestamp: Date.now(),
       end,
-      config: end === 'A' ? { ...this.configA } : { ...this.configB },
+      config: { ...newConfig },
     });
   }
 
   private handleFaultParamChange(end: TeletypeEnd, e: CustomEvent) {
     const value = (e.target as any).value as number;
+    const baseConfig = end === 'A' ? this.configA : this.configB;
+    const newConfig: EndpointConfig = { ...baseConfig, faultParam: value };
 
     if (end === 'A') {
-      this.configA = { ...this.configA, faultParam: value };
+      this.configA = newConfig;
     } else {
-      this.configB = { ...this.configB, faultParam: value };
+      this.configB = newConfig;
     }
 
     this.configHistory.push({
       timestamp: Date.now(),
       end,
-      config: end === 'A' ? { ...this.configA } : { ...this.configB },
+      config: { ...newConfig },
     });
   }
 
   private handleAutoRetransmitChange(end: TeletypeEnd, e: Event) {
     const checked = (e.target as HTMLInputElement).checked;
+    const baseConfig = end === 'A' ? this.configA : this.configB;
+    const newConfig: EndpointConfig = { ...baseConfig, enableAutoRetransmit: checked };
 
     if (end === 'A') {
-      this.configA = { ...this.configA, enableAutoRetransmit: checked };
+      this.configA = newConfig;
     } else {
-      this.configB = { ...this.configB, enableAutoRetransmit: checked };
+      this.configB = newConfig;
     }
 
     this.configHistory.push({
       timestamp: Date.now(),
       end,
-      config: end === 'A' ? { ...this.configA } : { ...this.configB },
+      config: { ...newConfig },
     });
   }
 
   private handleMaxRetriesChange(end: TeletypeEnd, e: CustomEvent) {
     const value = (e.target as any).value as number;
+    const baseConfig = end === 'A' ? this.configA : this.configB;
+    const newConfig: EndpointConfig = { ...baseConfig, maxRetransmitAttempts: Math.round(value) };
 
     if (end === 'A') {
-      this.configA = { ...this.configA, maxRetransmitAttempts: Math.round(value) };
+      this.configA = newConfig;
     } else {
-      this.configB = { ...this.configB, maxRetransmitAttempts: Math.round(value) };
+      this.configB = newConfig;
     }
 
     this.configHistory.push({
       timestamp: Date.now(),
       end,
-      config: end === 'A' ? { ...this.configA } : { ...this.configB },
+      config: { ...newConfig },
     });
   }
 

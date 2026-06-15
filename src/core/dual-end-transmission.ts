@@ -57,8 +57,8 @@ export function applyFaultInjection(
       break;
     }
     case 'burst_error': {
-      const burstLength = Math.floor(Math.max(1, Math.min(5, faultParam)));
-      const startBit = Math.floor(Math.random() * (5 - burstLength + 1));
+      const burstLength = Math.floor(Math.max(1, Math.min(5, faultParam + 1)));
+      const startBit = Math.floor(Math.random() * Math.max(1, (5 - burstLength + 1)));
       for (let i = startBit; i < startBit + burstLength; i++) {
         result[i] = !result[i];
       }
