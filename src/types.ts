@@ -70,3 +70,69 @@ export interface TransmissionReport {
   finalDecodedText: string;
   timestamp: number;
 }
+
+export type TeletypeEnd = 'A' | 'B';
+export type FaultInjectionType = 'random_bit_flip' | 'stuck_bit_0' | 'stuck_bit_1' | 'burst_error' | 'none';
+
+export interface EndpointConfig {
+  noiseLevel: number;
+  transmissionSpeed: number;
+  faultType: FaultInjectionType;
+  faultParam: number;
+  enableAutoRetransmit: boolean;
+  maxRetransmitAttempts: number;
+}
+
+export interface TransmissionColumnState {
+  index: number;
+  originalBits: [boolean, boolean, boolean, boolean, boolean];
+  originalChar: string;
+  transmittedBits: [boolean, boolean, boolean, boolean, boolean];
+  receivedBits: [boolean, boolean, boolean, boolean, boolean];
+  status: 'pending' | 'transmitting' | 'corrupted' | 'correct' | 'retransmitting';
+  errorBitPositions: number[];
+  retransmitCount: number;
+  shiftState: ShiftState;
+  isShiftCode: boolean;
+  decodedChar: string | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  fromEnd: TeletypeEnd;
+  toEnd: TeletypeEnd;
+  originalText: string;
+  sentColumns: TransmissionColumnState[];
+  receivedText: string;
+  errorPositions: number[];
+  totalRetransmits: number;
+  successRate: number;
+  timestamp: number;
+  status: 'sending' | 'sent' | 'failed';
+  configSnapshot: {
+    sender: EndpointConfig;
+    receiver: EndpointConfig;
+  };
+}
+
+export interface ChatSessionStats {
+  totalMessages: number;
+  totalChars: number;
+  totalErrors: number;
+  totalRetransmits: number;
+  averageSuccessRate: number;
+  messagesByEnd: Record<TeletypeEnd, number>;
+}
+
+export interface DualEndCommunicationRecord {
+  sessionId: string;
+  startTime: number;
+  endTime: number;
+  messages: ChatMessage[];
+  stats: ChatSessionStats;
+  configHistory: {
+    timestamp: number;
+    end: TeletypeEnd;
+    config: EndpointConfig;
+  }[];
+}

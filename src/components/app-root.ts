@@ -9,6 +9,7 @@ import './paper-tape-view';
 import './transmission-control';
 import './decoder-panel';
 import './challenge-mode';
+import './teletype-chatroom';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
@@ -96,7 +97,7 @@ export class AppRoot extends LitElement {
   @state() private noiseLevel = 0;
   @state() private playbackSpeed = 1;
   @state() private isPlaying = false;
-  @state() private mode: 'classic' | 'challenge' = 'classic';
+  @state() private mode: 'classic' | 'challenge' | 'chatroom' = 'classic';
 
   private originalEncodedColumns: EncodedColumn[] = [];
 
@@ -169,7 +170,7 @@ export class AppRoot extends LitElement {
     this.isPlaying = false;
   }
 
-  private handleModeChange(mode: 'classic' | 'challenge') {
+  private handleModeChange(mode: 'classic' | 'challenge' | 'chatroom') {
     this.mode = mode;
   }
 
@@ -191,6 +192,12 @@ export class AppRoot extends LitElement {
             @click=${() => this.handleModeChange('challenge')}
           >
             纠错挑战
+          </button>
+          <button
+            class=${this.mode === 'chatroom' ? 'active' : ''}
+            @click=${() => this.handleModeChange('chatroom')}
+          >
+            联机对话
           </button>
         </div>
       </div>
@@ -224,7 +231,7 @@ export class AppRoot extends LitElement {
             .decodedColumns=${this.decodedColumns}
             .originalText=${this.originalText}
           ></decoder-panel>
-        ` : html`
+        ` : this.mode === 'challenge' ? html`
           <encoder-panel
             .columns=${this.encodedColumns}
             @text-input=${this.handleTextInput}
@@ -234,6 +241,8 @@ export class AppRoot extends LitElement {
             .columns=${this.encodedColumns}
             .originalText=${this.originalText}
           ></challenge-mode>
+        ` : html`
+          <teletype-chatroom></teletype-chatroom>
         `}
       </div>
     `;
