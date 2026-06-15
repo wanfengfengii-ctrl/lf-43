@@ -445,6 +445,104 @@ export class ChallengeMode extends LitElement {
         justify-content: flex-end;
         margin-top: 16px;
       }
+      .repair-detail-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .repair-detail-item {
+        background: rgba(0, 0, 0, 0.25);
+        border: 1px solid #3d3428;
+        border-radius: 6px;
+        padding: 12px;
+      }
+      .repair-detail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #2a2318;
+      }
+      .repair-detail-title {
+        font-weight: 600;
+        font-size: 13px;
+        color: #f5f0e8;
+      }
+      .repair-detail-change {
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 14px;
+      }
+      .repair-detail-bits {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .repair-bit-group {
+        flex: 1;
+        text-align: center;
+      }
+      .repair-bit-label {
+        font-size: 10px;
+        color: #8b8070;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 4px;
+      }
+      .repair-bit-row {
+        display: flex;
+        justify-content: center;
+        gap: 3px;
+        margin-bottom: 4px;
+      }
+      .repair-bit {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        font-weight: 700;
+        font-family: 'Share Tech Mono', monospace;
+      }
+      .repair-bit.punched {
+        background: #1a1410;
+        color: #f5f0e8;
+        border: 1px solid #3d3428;
+      }
+      .repair-bit.unpunched {
+        background: #e8e0d0;
+        color: #5a5040;
+        border: 1px solid #c8c0b0;
+      }
+      .repair-bit.changed-before {
+        box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.6);
+        border-color: #c0392b !important;
+      }
+      .repair-bit.changed-after {
+        box-shadow: 0 0 0 2px rgba(45, 139, 70, 0.6);
+        border-color: #2d8b46 !important;
+      }
+      .repair-bit-str {
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 11px;
+        color: #8b8070;
+        letter-spacing: 1px;
+      }
+      .repair-bit-arrow {
+        color: #5a5040;
+        font-weight: 700;
+        font-size: 14px;
+      }
+      .repair-detail-changed {
+        font-size: 11px;
+        color: #8b8070;
+        text-align: right;
+        font-family: 'IBM Plex Mono', monospace;
+      }
       .stats-bar {
         display: flex;
         gap: 16px;
@@ -612,26 +710,63 @@ export class ChallengeMode extends LitElement {
     if (!this.repairBits || this.selectedHistoryIndex < 0) return;
 
     const column = this.transmissionHistory[this.selectedHistoryIndex];
+    const shiftBefore = this.getEffectiveShiftStateAt(this.selectedHistoryIndex);
     const repaired = repairColumn(column, this.repairBits);
     
-    const { decodedChar, newShiftState } = decodeSingleColumn(this.repairBits, this.getShiftStateAt(this.selectedHistoryIndex));
+    const { decodedChar, newShiftState, isShiftCode } = decodeSingleColumn(this.repairBits, shiftBefore);
     repaired.repairedDecodedChar = decodedChar;
+    repaired.isShiftCode = isShiftCode;
+    repaired.shiftState = newShiftState;
 
     const newHistory = [...this.transmissionHistory];
     newHistory[this.selectedHistoryIndex] = repaired;
     this.transmissionHistory = newHistory;
+
+    if (this.selectedHistoryIndex === this.currentIndex) {
+      this.currentShiftState = newShiftState;
+    } else if (this.selectedHistoryIndex < this.currentIndex) {
+      this.recomputeShiftAndDecodeFrom(this.selectedHistoryIndex + 1);
+      this.currentShiftState = this.getEffectiveShiftStateAt(this.currentIndex + 1);
+    }
 
     if (repaired.status === 'repaired') {
       this.repairBits = null;
     }
   }
 
-  private getShiftStateAt(index: number): ShiftState {
+  private recomputeShiftAndDecodeFrom(startIndex: number) {
+    const shiftBefore = this.getEffectiveShiftStateAt(startIndex);
+    let currentShift = shiftBefore;
+    const newHistory = [...this.transmissionHistory];
+
+    for (let i = startIndex; i <= this.currentIndex; i++) {
+      const col = newHistory[i];
+      const activeBits = col.repairedBits || col.receivedBits;
+      const { decodedChar, newShiftState, isShiftCode } = decodeSingleColumn(activeBits, currentShift);
+      
+      newHistory[i] = {
+        ...col,
+        receivedDecodedChar: col.repairedBits ? col.receivedDecodedChar : decodedChar,
+        repairedDecodedChar: col.repairedBits ? decodedChar : undefined,
+        isShiftCode: col.repairedBits ? (isShiftCode || col.isShiftCode) : isShiftCode,
+        shiftState: newShiftState,
+      };
+      currentShift = newShiftState;
+    }
+
+    this.transmissionHistory = newHistory;
+  }
+
+  private getEffectiveShiftStateAt(index: number): ShiftState {
     let shift: ShiftState = 'LETTERS';
     for (let i = 0; i < index; i++) {
       const col = this.transmissionHistory[i];
-      if (col.isShiftCode) {
-        shift = col.shiftState;
+      const activeBits = col.repairedBits || col.receivedBits;
+      const key = activeBits.map(b => (b ? '1' : '0')).join('');
+      if (key === '11111') {
+        shift = 'LETTERS';
+      } else if (key === '11011') {
+        shift = 'FIGURES';
       }
     }
     return shift;
@@ -649,6 +784,7 @@ export class ChallengeMode extends LitElement {
 
   private selectHistoryItem(index: number) {
     if (index < 0 || index > this.currentIndex) return;
+    if (this.phase === 'transmitting') return;
     this.selectedHistoryIndex = index;
     const col = this.transmissionHistory[index];
     if (col.status === 'corrupted') {
@@ -656,8 +792,24 @@ export class ChallengeMode extends LitElement {
     } else if (col.repairedBits) {
       this.repairBits = [...col.repairedBits] as [boolean, boolean, boolean, boolean, boolean];
     } else {
-      this.repairBits = null;
+      this.repairBits = [...col.receivedBits] as [boolean, boolean, boolean, boolean, boolean];
     }
+  }
+
+  private enterManualRepair() {
+    if (this.selectedHistoryIndex < 0 || this.selectedHistoryIndex > this.currentIndex) return;
+    const col = this.transmissionHistory[this.selectedHistoryIndex];
+    if (col.status === 'corrupted') {
+      this.repairBits = [...col.receivedBits] as [boolean, boolean, boolean, boolean, boolean];
+    } else if (col.repairedBits) {
+      this.repairBits = [...col.repairedBits] as [boolean, boolean, boolean, boolean, boolean];
+    } else {
+      this.repairBits = [...col.receivedBits] as [boolean, boolean, boolean, boolean, boolean];
+    }
+  }
+
+  private cancelManualRepair() {
+    this.repairBits = null;
   }
 
   private handleNoiseChange(e: CustomEvent) {
@@ -780,16 +932,21 @@ export class ChallengeMode extends LitElement {
               `}
             </div>
 
-            ${this.repairBits !== null && currentCol?.status === 'corrupted' ? html`
+            ${this.repairBits !== null ? html`
               <div class="repair-section">
-                <div class="repair-title">🔧 错误检测 — 手动修补模式</div>
+                <div class="repair-title">
+                  🔧 ${currentCol?.status === 'corrupted' ? '错误检测 — ' : ''}手动修补模式
+                  <span style="margin-left:8px; font-size:10px; color:#8b8070; font-weight:400;">
+                    (第 ${this.selectedHistoryIndex + 1} 列)
+                  </span>
+                </div>
                 <div class="repair-hint">
                   点击孔位切换状态，将接收端的孔位修复为正确值。修复完成后点击"确认修补"。
                 </div>
                 <div class="comparison-row">
                   <div class="comparison-item before">
                     <div class="label">修复前</div>
-                    <div class="value">${currentCol.receivedDecodedChar || '?'}</div>
+                    <div class="value">${currentCol?.receivedDecodedChar || '?'}</div>
                   </div>
                   <div class="comparison-item after">
                     <div class="label">修复后预览</div>
@@ -808,18 +965,28 @@ export class ChallengeMode extends LitElement {
                 <button class="metal-button" @click=${this.pauseTransmission}>
                   ⏸ 暂停
                 </button>
-              ` : this.phase === 'paused' && this.repairBits !== null ? html`
+              ` : this.repairBits !== null ? html`
                 <button class="metal-button accent" @click=${this.applyRepair}>
                   ✓ 确认修补
                 </button>
-                ${currentCol?.status === 'repaired' ? html`
+                <button class="metal-button" @click=${this.cancelManualRepair}>
+                  ✕ 取消修补
+                </button>
+                ${currentCol?.status === 'repaired' && this.selectedHistoryIndex === this.currentIndex ? html`
                   <button class="metal-button" @click=${this.continueAfterRepair}>
                     ▶ 继续传输
                   </button>
                 ` : nothing}
-              ` : html`
+              ` : this.phase === 'paused' ? html`
                 <button class="metal-button accent" @click=${this.resumeTransmission}>
                   ▶ 继续传输
+                </button>
+                <button class="metal-button" @click=${this.enterManualRepair} ?disabled=${this.selectedHistoryIndex < 0}>
+                  🔧 手动修补此列
+                </button>
+              ` : html`
+                <button class="metal-button" @click=${this.enterManualRepair} ?disabled=${this.selectedHistoryIndex < 0 || this.selectedHistoryIndex > this.currentIndex}>
+                  🔧 手动修补此列
                 </button>
               `}
               
@@ -915,7 +1082,7 @@ export class ChallengeMode extends LitElement {
 
   private getRepairPreviewChar(): string {
     if (!this.repairBits || this.selectedHistoryIndex < 0) return '?';
-    const shiftState = this.getShiftStateAt(this.selectedHistoryIndex);
+    const shiftState = this.getEffectiveShiftStateAt(this.selectedHistoryIndex);
     const { decodedChar } = decodeSingleColumn(this.repairBits, shiftState);
     return decodedChar || '?';
   }
@@ -991,14 +1158,48 @@ export class ChallengeMode extends LitElement {
           ${r.repairResults.length > 0 ? html`
             <div class="report-section">
               <h3>修复记录 (共 ${r.repairResults.length} 处)</h3>
-              <ul class="damage-list">
+              <div class="repair-detail-list">
                 ${r.repairResults.map(rr => html`
-                  <li>
-                    <span>第 ${rr.index + 1} 列 (${rr.originalChar})</span>
-                    <span>${rr.beforeChar || '?'} → ${rr.afterChar || '?'} ${rr.success ? '✓' : '✗'}</span>
-                  </li>
+                  <div class="repair-detail-item">
+                    <div class="repair-detail-header">
+                      <span class="repair-detail-title">第 ${rr.index + 1} 列 — ${rr.originalChar} ${rr.success ? '✓' : '✗'}</span>
+                      <span class="repair-detail-change" style="color:${rr.success ? '#2d8b46' : '#c0392b'}; font-weight:600;">
+                        ${rr.beforeChar || '?'} → ${rr.afterChar || '?'}
+                      </span>
+                    </div>
+                    <div class="repair-detail-bits">
+                      <div class="repair-bit-group">
+                        <div class="repair-bit-label">原始</div>
+                        <div class="repair-bit-row">
+                          ${rr.originalBits.map((b, i) => this.renderReportBit(b, i, []))}
+                        </div>
+                        <div class="repair-bit-str">${rr.originalBits.map(b => b ? '1' : '0').join('')}</div>
+                      </div>
+                      <div class="repair-bit-arrow">→</div>
+                      <div class="repair-bit-group">
+                        <div class="repair-bit-label">修复前</div>
+                        <div class="repair-bit-row">
+                          ${rr.beforeBits.map((b, i) => this.renderReportBit(b, i, rr.changedBits, 'before'))}
+                        </div>
+                        <div class="repair-bit-str">${rr.beforeBits.map(b => b ? '1' : '0').join('')}</div>
+                      </div>
+                      <div class="repair-bit-arrow">→</div>
+                      <div class="repair-bit-group">
+                        <div class="repair-bit-label">修复后</div>
+                        <div class="repair-bit-row">
+                          ${rr.afterBits.map((b, i) => this.renderReportBit(b, i, rr.changedBits, 'after'))}
+                        </div>
+                        <div class="repair-bit-str">${rr.afterBits.map(b => b ? '1' : '0').join('')}</div>
+                      </div>
+                    </div>
+                    <div class="repair-detail-changed">
+                      改动位: ${rr.changedBits.length > 0
+                        ? rr.changedBits.map(p => `第${p + 1}位`).join(', ')
+                        : '无'}
+                    </div>
+                  </div>
                 `)}
-              </ul>
+              </div>
             </div>
           ` : nothing}
 
@@ -1025,6 +1226,20 @@ export class ChallengeMode extends LitElement {
       }
     }
     return html;
+  }
+
+  private renderReportBit(bit: boolean, index: number, changedBits: number[], phase?: 'before' | 'after') {
+    const isChanged = changedBits.includes(index);
+    let className = 'report-bit ';
+    className += bit ? 'punched ' : 'unpunched ';
+    if (isChanged) {
+      className += phase === 'before' ? 'changed-before ' : 'changed-after ';
+    }
+    return html`
+      <div class="${className}" title="位${index + 1}: ${bit ? '1' : '0'}${isChanged ? ' (已改动)' : ''}">
+        ${index + 1}
+      </div>
+    `;
   }
 
   disconnectedCallback() {

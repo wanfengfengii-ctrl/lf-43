@@ -113,12 +113,22 @@ export function generateTransmissionReport(
       const beforeChar = h.receivedDecodedChar;
       const afterChar = h.repairedDecodedChar;
       const success = h.status === 'repaired';
+      const changedBits: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        if (h.receivedBits[i] !== h.repairedBits![i]) {
+          changedBits.push(i);
+        }
+      }
       return {
         index: h.index,
         originalChar: h.originalChar,
         beforeChar,
         afterChar: afterChar || null,
         success,
+        originalBits: h.originalBits,
+        beforeBits: h.receivedBits,
+        afterBits: h.repairedBits!,
+        changedBits,
       };
     });
 

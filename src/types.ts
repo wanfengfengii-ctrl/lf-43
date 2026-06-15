@@ -56,7 +56,17 @@ export interface TransmissionReport {
   correctColumns: number;
   accuracy: number;
   damageLocations: { index: number; originalChar: string; errorBits: number[] }[];
-  repairResults: { index: number; originalChar: string; beforeChar: string | null; afterChar: string | null; success: boolean }[];
+  repairResults: {
+    index: number;
+    originalChar: string;
+    beforeChar: string | null;
+    afterChar: string | null;
+    success: boolean;
+    originalBits: [boolean, boolean, boolean, boolean, boolean];
+    beforeBits: [boolean, boolean, boolean, boolean, boolean];
+    afterBits: [boolean, boolean, boolean, boolean, boolean];
+    changedBits: number[];
+  }[];
   finalDecodedText: string;
   timestamp: number;
 }
