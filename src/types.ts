@@ -136,3 +136,102 @@ export interface DualEndCommunicationRecord {
     config: EndpointConfig;
   }[];
 }
+
+export type MessagePriority = 'high' | 'normal' | 'low';
+
+export type QueueStatus = 'queued' | 'arbitrating' | 'transmitting' | 'collision' | 'waiting_retry' | 'completed' | 'timeout';
+
+export type TimeoutStrategy = 'drop' | 'retry' | 'escalate';
+
+export interface LinkConfig {
+  bandwidthBps: number;
+  bufferSize: number;
+  defaultPriority: MessagePriority;
+  timeoutStrategy: TimeoutStrategy;
+  timeoutMs: number;
+  maxRetryAttempts: number;
+  collisionDetectEnabled: boolean;
+  arbitrationMode: 'priority' | 'fifo' | 'round_robin';
+}
+
+export interface QueuedMessage {
+  id: string;
+  chatMessageId: string;
+  fromEnd: TeletypeEnd;
+  toEnd: TeletypeEnd;
+  originalText: string;
+  priority: MessagePriority;
+  queueStatus: QueueStatus;
+  enqueueTime: number;
+  dequeueTime: number | null;
+  startTime: number | null;
+  endTime: number | null;
+  waitDurationMs: number;
+  transmitDurationMs: number;
+  totalDurationMs: number;
+  collisionCount: number;
+  retryCount: number;
+  deliveryOrder: number | null;
+  transmissionPath: TeletypeEnd[];
+  lastEvent: string;
+  columnProgress: number;
+  totalColumns: number;
+}
+
+export interface LinkState {
+  isBusy: boolean;
+  currentOwner: TeletypeEnd | null;
+  currentMessageId: string | null;
+  utilizationPercent: number;
+  totalTransmitTimeMs: number;
+  totalIdleTimeMs: number;
+  totalCollisions: number;
+  totalArbitrations: number;
+}
+
+export interface CollisionEvent {
+  id: string;
+  timestamp: number;
+  conflictingEnds: TeletypeEnd[];
+  messageIds: string[];
+  resolved: boolean;
+  resolution: string;
+}
+
+export interface ArbitrationChatMessage extends ChatMessage {
+  queueInfo: {
+    priority: MessagePriority;
+    enqueueTime: number;
+    startTime: number | null;
+    endTime: number | null;
+    waitDurationMs: number;
+    transmitDurationMs: number;
+    collisionCount: number;
+    retryCount: number;
+    deliveryOrder: number | null;
+    status: QueueStatus;
+    transmissionPath: TeletypeEnd[];
+  };
+}
+
+export interface ArbitrationSessionStats extends ChatSessionStats {
+  totalQueueTimeMs: number;
+  avgQueueTimeMs: number;
+  maxQueueTimeMs: number;
+  totalCollisions: number;
+  totalRetries: number;
+  linkUtilizationPercent: number;
+  messagesDeliveredInOrder: number;
+  messagesDeliveredOutOfOrder: number;
+  timeoutDrops: number;
+}
+
+export interface ArbitrationCommunicationRecord extends Omit<DualEndCommunicationRecord, 'messages' | 'stats'> {
+  messages: ArbitrationChatMessage[];
+  stats: ArbitrationSessionStats;
+  linkConfig: LinkConfig;
+  linkState: LinkState;
+  collisionEvents: CollisionEvent[];
+  queueHistory: QueuedMessage[];
+  deliveryOrder: string[];
+}

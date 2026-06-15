@@ -10,6 +10,7 @@ import './transmission-control';
 import './decoder-panel';
 import './challenge-mode';
 import './teletype-chatroom';
+import './arbitration-chatroom';
 
 @customElement('app-root')
 export class AppRoot extends LitElement {
@@ -97,7 +98,7 @@ export class AppRoot extends LitElement {
   @state() private noiseLevel = 0;
   @state() private playbackSpeed = 1;
   @state() private isPlaying = false;
-  @state() private mode: 'classic' | 'challenge' | 'chatroom' = 'classic';
+  @state() private mode: 'classic' | 'challenge' | 'chatroom' | 'arbitration' = 'classic';
 
   private originalEncodedColumns: EncodedColumn[] = [];
 
@@ -170,7 +171,7 @@ export class AppRoot extends LitElement {
     this.isPlaying = false;
   }
 
-  private handleModeChange(mode: 'classic' | 'challenge' | 'chatroom') {
+  private handleModeChange(mode: 'classic' | 'challenge' | 'chatroom' | 'arbitration') {
     this.mode = mode;
   }
 
@@ -198,6 +199,12 @@ export class AppRoot extends LitElement {
             @click=${() => this.handleModeChange('chatroom')}
           >
             联机对话
+          </button>
+          <button
+            class=${this.mode === 'arbitration' ? 'active' : ''}
+            @click=${() => this.handleModeChange('arbitration')}
+          >
+            仲裁调度
           </button>
         </div>
       </div>
@@ -241,6 +248,8 @@ export class AppRoot extends LitElement {
             .columns=${this.encodedColumns}
             .originalText=${this.originalText}
           ></challenge-mode>
+        ` : this.mode === 'arbitration' ? html`
+          <arbitration-chatroom></arbitration-chatroom>
         ` : html`
           <teletype-chatroom></teletype-chatroom>
         `}

@@ -8,9 +8,17 @@ import type {
   ChatSessionStats,
   DualEndCommunicationRecord,
   TeletypeEnd,
+  ArbitrationChatMessage,
+  MessagePriority,
+  QueuedMessage,
+  ArbitrationCommunicationRecord,
+  LinkConfig,
+  LinkState,
+  CollisionEvent,
 } from '../types';
 import { encodeText } from './baudot-encoder';
 import { decodeSingleColumn } from './baudot-decoder';
+import { calculateArbitrationStats } from './link-arbitration';
 
 export function createTransmissionColumnStates(columns: EncodedColumn[]): TransmissionColumnState[] {
   return columns.map((col, index) => ({
@@ -270,4 +278,91 @@ export function getFaultTypeDescription(type: FaultInjectionType): string {
     case 'burst_error': return '连续多位同时翻转';
     default: return '';
   }
+}
+
+export function createArbitrationChatMessage(
+  fromEnd: TeletypeEnd,
+  toEnd: TeletypeEnd,
+  text: string,
+  senderConfig: EndpointConfig,
+  receiverConfig: EndpointConfig,
+  priority: MessagePriority,
+  enqueueTime: number
+): ArbitrationChatMessage {
+  const baseMessage = createChatMessage(fromEnd, toEnd, text, senderConfig, receiverConfig);
+  return {
+    ...baseMessage,
+    queueInfo: {
+      priority,
+      enqueueTime,
+      startTime: null,
+      endTime: null,
+      waitDurationMs: 0,
+      transmitDurationMs: 0,
+      collisionCount: 0,
+      retryCount: 0,
+      deliveryOrder: null,
+      status: 'queued',
+      transmissionPath: [fromEnd],
+    },
+  };
+}
+
+export function attachQueueInfoToMessage(
+  message: ChatMessage,
+  queuedMsg: QueuedMessage,
+  deliveryOrder: number
+): ArbitrationChatMessage {
+  return {
+    ...message,
+    queueInfo: {
+      priority: queuedMsg.priority,
+      enqueueTime: queuedMsg.enqueueTime,
+      startTime: queuedMsg.startTime,
+      endTime: queuedMsg.endTime,
+      waitDurationMs: queuedMsg.waitDurationMs,
+      transmitDurationMs: queuedMsg.transmitDurationMs,
+      collisionCount: queuedMsg.collisionCount,
+      retryCount: queuedMsg.retryCount,
+      deliveryOrder,
+      status: queuedMsg.queueStatus,
+      transmissionPath: queuedMsg.transmissionPath,
+    },
+  };
+}
+
+export function createArbitrationCommunicationRecord(
+  sessionId: string,
+  messages: ArbitrationChatMessage[],
+  configHistory: { timestamp: number; end: TeletypeEnd; config: EndpointConfig }[],
+  linkConfig: LinkConfig,
+  linkState: LinkState,
+  collisionEvents: CollisionEvent[],
+  queueHistory: QueuedMessage[],
+  deliveryOrder: string[]
+): ArbitrationCommunicationRecord {
+  const baseRecord = createCommunicationRecord(sessionId, messages, configHistory);
+  const sessionStart = messages.length > 0 ? messages[0].queueInfo.enqueueTime : Date.now();
+
+  return {
+    sessionId: baseRecord.sessionId,
+    startTime: baseRecord.startTime,
+    endTime: baseRecord.endTime,
+    configHistory: baseRecord.configHistory,
+    messages,
+    stats: calculateArbitrationStats(messages, linkState, sessionStart),
+    linkConfig,
+    linkState,
+    collisionEvents,
+    queueHistory,
+    deliveryOrder,
+  };
+}
+
+export function estimateTransmitDurationMs(
+  columnCount: number,
+  speedMultiplier: number = 1
+): number {
+  const baseIntervalMs = 1000;
+  return Math.ceil((columnCount * baseIntervalMs) / speedMultiplier);
 }
