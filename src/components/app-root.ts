@@ -67,23 +67,32 @@ export class AppRoot extends LitElement {
   @state() private playbackSpeed = 1;
   @state() private isPlaying = false;
 
+  private originalEncodedColumns: EncodedColumn[] = [];
+
   @query('paper-tape-view') tapeView!: import('./paper-tape-view').PaperTapeView;
 
   private handleTextInput(e: CustomEvent) {
     const text = e.detail.text;
-    this.originalText = text;
+    const { filtered } = filterText(text);
+    this.originalText = filtered;
     this.encodedColumns = encodeText(text);
+    this.originalEncodedColumns = this.encodedColumns.map(c => ({ ...c, bits: [...c.bits] as [boolean, boolean, boolean, boolean, boolean] }));
     this.decodedColumns = decodeColumns(this.encodedColumns);
     this.isPlaying = false;
+    if (this.tapeView) {
+      this.tapeView.resetPlayback();
+    }
   }
 
   private handleBitsChanged(e: CustomEvent) {
     const { index, bits } = e.detail;
+    const originalBits = this.originalEncodedColumns[index]?.bits;
+    const corrupted = originalBits ? bits.some((b: boolean, i: number) => b !== originalBits[i]) : false;
     const newColumns = [...this.encodedColumns];
     newColumns[index] = {
       ...newColumns[index],
       bits,
-      corrupted: bits.some((b: boolean, i: number) => b !== this.encodedColumns[index].bits[i]),
+      corrupted,
     };
     this.encodedColumns = newColumns;
     this.decodedColumns = decodeColumns(this.encodedColumns);
@@ -116,7 +125,12 @@ export class AppRoot extends LitElement {
   }
 
   private handleInjectNoise() {
-    this.encodedColumns = injectNoise(this.encodedColumns, this.noiseLevel);
+    const noisyColumns = injectNoise(this.encodedColumns, this.noiseLevel);
+    this.encodedColumns = noisyColumns.map((col, i) => {
+      const originalBits = this.originalEncodedColumns[i]?.bits;
+      const corrupted = originalBits ? col.bits.some((b, j) => b !== originalBits[j]) : col.corrupted;
+      return { ...col, corrupted };
+    });
     this.decodedColumns = decodeColumns(this.encodedColumns);
   }
 
